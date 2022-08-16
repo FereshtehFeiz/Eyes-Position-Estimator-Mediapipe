@@ -4,13 +4,26 @@ import mediapipe as mp
 import time
 import utils, math
 import numpy as np
+import csv 
+
 # variables 
 frame_counter =0
 CEF_COUNTER =0
 TOTAL_BLINKS =0
+eye_open =0
+eye_close =0
 # constants
 CLOSED_EYES_FRAME =3
 FONTS =cv.FONT_HERSHEY_COMPLEX
+
+# create the csv file
+f = open('out.csv', 'w', newline='')
+# add coloumns
+fieldnames = ['frame_id','eye_open','eye_close', 'right_pose_eye', 'left_pose_eye']
+# create the csv writer and add the headers
+writer = csv.writer(f)
+writer = csv.DictWriter(f, fieldnames=fieldnames)
+writer.writeheader()
 
 # face bounder indices 
 FACE_OVAL=[ 10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103,67, 109]
@@ -29,7 +42,8 @@ RIGHT_EYEBROW=[ 70, 63, 105, 66, 107, 55, 65, 52, 53, 46 ]
 
 map_face_mesh = mp.solutions.face_mesh
 # camera object 
-camera = cv.VideoCapture(0)
+camera = cv.VideoCapture(0) #use real time webcam camera
+video = cv.VideoCapture("video.mp4")  #use video as input
 # landmark detection function 
 def landmarksDetection(img, results, draw=False):
     img_height, img_width= img.shape[:2]
@@ -185,7 +199,8 @@ with map_face_mesh.FaceMesh(min_detection_confidence =0.5, min_tracking_confiden
     # starting Video loop here.
     while True:
         frame_counter +=1 # frame counter
-        ret, frame = camera.read() # getting frame from camera 
+        # ret, frame = camera.read() # getting frame from camera 
+        ret, frame = video.read() # read the video
         if not ret: 
             break # no more frames break
         #  resizing frame
@@ -200,15 +215,19 @@ with map_face_mesh.FaceMesh(min_detection_confidence =0.5, min_tracking_confiden
             # cv.putText(frame, f'ratio {ratio}', (100, 100), FONTS, 1.0, utils.GREEN, 2)
             utils.colorBackgroundText(frame,  f'Ratio : {round(ratio,2)}', FONTS, 0.7, (30,100),2, utils.PINK, utils.YELLOW)
 
-            if ratio >5.5:
+            if ratio >3.5:   # initial value is 5.5
                 CEF_COUNTER +=1
                 # cv.putText(frame, 'Blink', (200, 50), FONTS, 1.3, utils.PINK, 2)
                 utils.colorBackgroundText(frame,  f'Blink', FONTS, 1.7, (int(frame_height/2), 100), 2, utils.YELLOW, pad_x=6, pad_y=6, )
-
             else:
                 if CEF_COUNTER>CLOSED_EYES_FRAME:
+                    eye_close=1
+                    eye_open=0
                     TOTAL_BLINKS +=1
                     CEF_COUNTER =0
+                else:
+                    eye_close=0
+                    eye_open=1
             # cv.putText(frame, f'Total Blinks: {TOTAL_BLINKS}', (100, 150), FONTS, 0.6, utils.GREEN, 2)
             utils.colorBackgroundText(frame,  f'Total Blinks: {TOTAL_BLINKS}', FONTS, 0.7, (30,150),2)
             
@@ -226,7 +245,16 @@ with map_face_mesh.FaceMesh(min_detection_confidence =0.5, min_tracking_confiden
             eye_position_left, color = positionEstimator(crop_left)
             utils.colorBackgroundText(frame, f'L: {eye_position_left}', FONTS, 1.0, (40, 320), 2, color[0], color[1], 8, 8)
             
+            rows = [
+                {'frame_id': frame_counter,
+                'eye_open': eye_open,
+                'eye_close': eye_close,
+                'right_pose_eye': eye_position,
+                'left_pose_eye': eye_position_left}]
             
+            # append the data in the csv
+            with open('out.csv', 'w', encoding='UTF8', newline='') as f:
+                writer.writerows(rows)
 
 
         # calculating  frame per seconds FPS
@@ -240,5 +268,8 @@ with map_face_mesh.FaceMesh(min_detection_confidence =0.5, min_tracking_confiden
         key = cv.waitKey(2)
         if key==ord('q') or key ==ord('Q'):
             break
+        
     cv.destroyAllWindows()
-    camera.release()
+    # close the file
+    f.close()
+    # camera.release()
